@@ -1,21 +1,8 @@
 {
   "name": "AllMorphe Patches",
   "version": "2.3.0",
-  "description": "Aggregated patch metadata from 1 bundles from morphe-patches.software. Total bundles: 1.",
-  "patches_metadata": [
-    {
-      "version": "2.3.0",
-      "download_url": "https://github.com/MorpheApp/morphe-patches/releases/download/v2.3.0/patches-2.3.0.mpp",
-      "public_key": "g8Ys9leTu2yeixojeR35HrNkK6eOSLpA6nNIizRutqI=",
-      "created_at": "2026-11-16T13:08:19",
-      "source_repo": "github.com/MorpheApp/morphe-patches",
-      "repo_name": "morphe-patches",
-      "age_days": 0
-    }
-  ],
-  "lastUpdated": "2026-11-22T08:11:11Z",
-  "source": "morphe-patches.software",
-  "totalBundles": 1,
-  "totalPatches": 1,
-  "format": "morphe-patch-metadata-v1"
+  "public_key": "g8Ys9leTu2yeixojeR35HrNkK6eOSLpA6nNIizRutqI=",
+  "created_at": "2026-11-16T13:08:19",
+  "format": "morphe-patch-metadata-v1",
+  "source": "morphe-patches.software"
 }
