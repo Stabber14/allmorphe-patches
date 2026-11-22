@@ -1,84 +1,49 @@
 # AllMorphe
 
-A project that aggregates **all Morphe patches** from [morphe-patches.software](https://morphe-patches.software/) into a single, easily installable patch source for the Morphe Android app.
+An index of **every Morphe patch bundle** listed on [morphe-patches.software](https://morphe-patches.software/) (589 bundles, ~6,451 patches across ~1,114 apps), so you can install them all at once.
 
-## What is AllMorphe?
+## Why not a single Morphe source?
 
-AllMorphe collects all 327 patch bundles (6,451 patches across 1,114 apps) from the morphe-patches.website community site and provides them as a single Morphe patch source that:
+Morphe treats one GitHub repository as **one patch source**, backed by a single compiled `.mpp` file with one signing key. Community bundles are published by many different authors with different signing keys, so they cannot be merged into one `.mpp` without recompiling and re-signing. AllMorphe therefore ships the **list of all bundle repositories** instead, which Morphe can add in one step (it accepts many URLs at once) and each bundle keeps auto-updating from its own repo.
 
-- **Installs all at once** with a single source addition
-- **Auto-updates** when creators update their patches (Morphe fetches updates from the repository automatically)
-- **Works with any Android device** running Morphe
+## Install all patches at once
 
-## Installation
+### Android (Morphe app)
 
-### Option 1: Add via GitHub repository (recommended)
+1. Open Morphe → **Sources** → **+** (Add source).
+2. Open [`sources.txt`](sources.txt) in this repo and paste its contents into the dialog (Morphe accepts many URLs at once).
+3. Tap **Add**. All bundles are added and stay auto-updated from their own repos.
 
-Add this repository URL to Morphe's patch sources:
+Or use the deep links on morphe-patches.software per bundle.
 
-```
-github.com/your-username/allmorphe-patches
-```
+### Desktop (Morphe Desktop CLI)
 
-*(Note: You'll need to host the repository yourself, or use the provided setup script below)*
-
-### Option 2: Add via deep link (no hosting required)
-
-Tap this link to add all patches directly in Morphe:
-
-[morphe.software/add-source?github=MorpheApp%2Fmorphe-patches](morphe.software/add-source?github=MorpheApp%2Fmorphe-patches)
-
-*This adds the official Morphe Patches source only. For all bundles from morphe-patches.software, use Option 1.*
-
-### Option 3: Manual JSON metadata link
-
-If you have a direct link to the patches bundle JSON metadata, add it in Morphe:
-```
-https://morphe-patches.software/patches-bundle.json
+```bash
+# requires morphe-desktop-*-all.jar on PATH as 'morphe' (or set MORPHE_JAR)
+./install-all.sh your_app.apk patched.apk
 ```
 
-*(Verify this URL format with the morphe-patches.website site)*
+`install-all.sh` is generated from the catalog and passes every bundle repo via `-p`.
 
-## Project Structure
+## Files
 
+- `sources.txt` — one bundle repo URL per line (paste into Morphe).
+- `bundles.json` — full metadata for every bundle (name, author, patch count, target apps, …).
+- `install-all.sh` — Morphe Desktop one-command installer.
+- `allmorphe/fetch_patches.py` — regenerates the above from the catalog.
+- `allmorphe/scripts/update.sh` — local runner.
+- `allmorphe/.github/workflows/update.yml` — daily auto-refresh (3 AM UTC).
+
+## Auto-update
+
+The GitHub Actions workflow refreshes `sources.txt` / `bundles.json` daily from the morphe-patches.software catalog. Bundles themselves auto-update inside Morphe because each is its own GitHub source.
+
+To refresh manually:
+
+```bash
+cd allmorphe && bash scripts/update.sh
 ```
-allmorphe/
-├── README.md           # This file
-├── patches-bundle.json # Combined patch metadata (generated)
-├── scripts/
-│   └── update.sh     # Update script for auto-updating patches
-└── .github/
-    └── workflows/
-        └── update.yml # GitHub Actions for automatic updates
-```
-
-## How It Works
-
-1. **Patch sources**: Each bundle from morphe-patches.software is a GitHub repository containing .mpp patch files and a `patches-bundle.json` metadata file
-2. **Aggregation**: AllMorphe combines metadata from all bundles into a single index
-3. **Morphe integration**: When added as a GitHub repository source, Morphe automatically:
-   - Fetches available patches
-   - Shows patch versions (Latest, Stable, Dev)
-   - Keeps the source updated when creators push new versions
-   - Lets you select which patches to apply per app
-
-## Auto-Update Setup
-
-To have patches update automatically when creators update them:
-
-1. Host this repository on GitHub
-2. The included GitHub Actions workflow (`.github/workflows/update.yml`) will:
-   - Fetch the latest patches from morphe-patches.software
-   - Update the `patches-bundle.json` metadata
-   - Commit and push changes automatically
-3. Morphe will detect the new version and offer updates
 
 ## License
 
-MIT License - feel free to use, modify, and distribute.
-
-## Related
-
-- [Morphe Patches (official)](https://morphe.software/) - The official Morphe patch source
-- [morphe-patches on GitHub](https://github.com/MorpheApp/morphe-patches) - The official patches repository
-- [morphe-patches.software](https://morphe-patches.software/) - Community patches website
+MIT License. Patch bundles belong to their respective authors.

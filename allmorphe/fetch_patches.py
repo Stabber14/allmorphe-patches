@@ -1,121 +1,133 @@
 #!/usr/bin/env python3
-"""Fetch and aggregate Morphe patch metadata from bundle repositories."""
+"""Aggregate all Morphe patch bundle sources from morphe-patches.software.
+
+AllMorphe is NOT a single Morphe patch source (Morphe requires one compiled
+.mpp per source). Instead it is an index of every community bundle repo listed
+on morphe-patches.software, so you can install them all at once by pasting the
+generated sources.txt into Morphe's "Add source" dialog (or running the
+generated install-all.sh with Morphe Desktop).
+"""
 
 import json
 import os
-import re
-import requests
-import base64
+import urllib.request
 from datetime import datetime, timezone
 
-# Configuration: GitHub repo URLs for Morphe patch bundles
-# Start with the official Morphe Patches, add more from morphe-patches.software
-BUNDLE_REPOS = [
-    "github.com/MorpheApp/morphe-patches",
-    # Add more bundle repo URLs as discovered from morphe-patches.software:
-    # "github.com/username/patches-repo",
-    # "github.com/another-user/bundle-name",
-]
+CATALOG_URL = "https://morphe-patches.software/data/catalog.json"
+OFFICIAL_BUNDLE_URL = "https://raw.githubusercontent.com/MorpheApp/morphe-patches/main/patches-bundle.json"
 
 
-def fetch_bundle_metadata(github_url):
-    """Fetch patches-bundle.json from a GitHub repository."""
-    try:
-        match = re.search(r"github\.com/(.+)/(.+)", github_url)
-        if not match:
-            return None
-        
-        owner, repo_name = match.groups()
-        api_url = f"https://api.github.com/repos/{owner}/{repo_name}/contents/patches-bundle.json"
-        headers = {"Accept": "application/vnd.github.v3+json"}
-        
-        resp = requests.get(api_url, headers=headers, timeout=30)
-        
-        if resp.status_code == 200:
-            content = base64.b64decode(resp.json()["content"]).decode("utf-8")
-            bundle_data = json.loads(content)
-            
-            metadata = {
-                "version": bundle_data.get("version", "unknown"),
-                
-                "public_key": bundle_data.get("public_key", ""),
-                "created_at": bundle_data.get("created_at", ""),
-                "source_repo": github_url,
-                "repo_name": repo_name,
-            }
-            
-            # Calculate age since creation
-            if "created_at" in bundle_data:
-                try:
-                    created_date = datetime.fromisoformat(bundle_data["created_at"].replace("Z", "+00:00"))
-                    now = datetime.now(timezone.utc)
-                    metadata["age_days"] = max(1, (now - created_date).days)
-                except:
-                    metadata["age_days"] = 0
-            
-            return metadata
-        elif resp.status_code == 404:
-            print(f"No patches-bundle.json in {github_url}")
-            return None
-        else:
-            print(f"GitHub API returned {resp.status_code} for {github_url}")
-            return None
-    except Exception as e:
-        print(f"Failed to process {github_url}: {e}")
-        return None
+def fetch_catalog():
+    req = urllib.request.Request(CATALOG_URL, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return json.load(resp)
+
+
+def normalize_repo_url(repo, source):
+    if source == "gitlab":
+        return f"gitlab.com/{repo}"
+    return f"github.com/{repo}"
 
 
 def main():
-    print(f"📋 Processing {len(BUNDLE_REPOS)} bundle repositories...", flush=True)
-    
-    all_metadata = []
-    processed_repos = set()
-    
-    for github_url in BUNDLE_REPOS:
-        if not github_url:
+    print("📡 Fetching morphe-patches.software catalog...", flush=True)
+    catalog = fetch_catalog()
+    bundles = catalog.get("bundles", [])
+    print(f"   Found {len(bundles)} bundles", flush=True)
+
+    # Deduplicate by repo
+    seen = set()
+    repos = []
+    bundle_meta = []
+    for b in bundles:
+        repo = b.get("repo", "")
+        if not repo or repo in seen:
             continue
-        
-        metadata = fetch_bundle_metadata(github_url)
-        if metadata:
-            processed_repos.add(github_url)
-            all_metadata.append(metadata)
-            print(f"  ✅ {metadata['version']} - {metadata['repo_name']}", flush=True)
-    
-    # Sort by creation date (newest first)
-    all_metadata.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-    
-    # Determine combined version (newest patch version)
-    combined_version = "1.0.0"
-    if all_metadata:
-        combined_version = all_metadata[0].get("version", "1.0.0")
-    
-    # Create the combined patches-bundle.json
-    combined = {
-        "name": "AllMorphe Patches",
-        "version": combined_version,
-        "description": f"Aggregated patch metadata from {len(all_metadata)} bundles "
-                       f"from morphe-patches.software. "
-                       f"Total bundles: {len(processed_repos)}.",
-        "patches_metadata": all_metadata,
+        seen.add(repo)
+        source = b.get("source", "github")
+        url = normalize_repo_url(repo, source)
+        repos.append(url)
+        bundle_meta.append({
+            "repo": repo,
+            "source": source,
+            "url": url,
+            "name": b.get("name"),
+            "author": b.get("author"),
+            "patchCount": b.get("patchCount", 0),
+            "targetApps": b.get("targetApps", []),
+            "stars": b.get("stars", 0),
+            "deepLink": b.get("deepLink"),
+        })
+
+    repos.sort()
+
+    # Repo root is parent of this script's directory (allmorphe/)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+
+    # Write sources.txt
+    sources_path = os.path.join(repo_root, "sources.txt")
+    with open(sources_path, "w") as f:
+        f.write("# AllMorphe: paste these lines into Morphe -> Sources -> + (Add source)\n")
+        f.write("# Morphe accepts multiple URLs at once (space or newline separated).\n")
+        f.write("# Auto-generated from morphe-patches.software catalog.\n")
+        f.write("\n".join(repos) + "\n")
+    print(f"📝 Wrote {len(repos)} sources -> {sources_path}")
+
+    # Write bundles.json
+    bundles_path = os.path.join(repo_root, "bundles.json")
+    payload = {
+        "name": "AllMorphe Bundle Index",
         "lastUpdated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source": "morphe-patches.software",
-        "totalBundles": len(processed_repos),
-        "totalPatches": len(all_metadata),
-        "format": "morphe-patch-metadata-v1"
+        "totalBundles": len(repos),
+        "bundles": bundle_meta,
     }
-    
-    # Write to the allmorphe folder relative to the script
-    # __file__ is /workspace/.../allmorphe/fetch_patches.py
-    script_dir = os.path.dirname(os.path.abspath(__file__))  # /workspace/.../allmorphe
-    output_path = os.path.join(script_dir, "patches-bundle.json")  # /workspace/.../allmorphe/patches-bundle.json
-    with open(output_path, "w") as f:
-        json.dump(combined, f, indent=2)
-    
-    print(f"\n📝 Generated: patches-bundle.json")
-    print(f"   Version: {combined['version']}")
-    print(f"   Total bundles: {combined['totalBundles']}")
-    print(f"   Total patches metadata: {combined['totalPatches']}")
-    print(f"   Format: {combined['format']}")
+    with open(bundles_path, "w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"📝 Wrote bundle metadata -> {bundles_path}")
+
+    # Write install-all.sh for Morphe Desktop CLI
+    install_path = os.path.join(repo_root, "install-all.sh")
+    flags = " ".join(f'-p="{r}"' for r in repos)
+    with open(install_path, "w") as f:
+        f.write("#!/bin/bash\n")
+        f.write("# AllMorphe: patch an APK with ALL community bundles at once.\n")
+        f.write("# Usage: ./install-all.sh <app.apk> [output.apk]\n")
+        f.write("# Requires Morphe Desktop (morphe-desktop-*-all.jar) on PATH as 'morphe', or set MORPHE_JAR.\n")
+        f.write('set -e\n')
+        f.write('APK="${1:?usage: $0 <app.apk> [output.apk]}"\n')
+        f.write('OUT="${2:-patched.apk}"\n')
+        f.write('MORPHE="${MORPHE_JAR:-morphe}"\n')
+        f.write(f'exec "$MORPHE" patch {flags} -o="$OUT" "$APK"\n')
+    os.chmod(install_path, 0o755)
+    print(f"📝 Wrote Morphe Desktop installer -> {install_path}")
+
+    # Also keep a copy inside allmorphe/ for backwards compat
+    for name in ("sources.txt", "bundles.json"):
+        src = os.path.join(repo_root, name)
+        dst = os.path.join(script_dir, name)
+        with open(src) as a, open(dst, "w") as b:
+            b.write(a.read())
+    # Mirror official Morphe patches-bundle.json at repo root so that
+    # 'github.com/Stabber14/allmorphe-patches' works as a Morphe source
+    # without download errors (Morphe requires a valid patches-bundle.json + .mpp).
+    try:
+        import base64
+        req = urllib.request.Request(
+            OFFICIAL_BUNDLE_URL,
+            headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "Mozilla/5.0"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            official = json.load(resp)
+        mirror_path = os.path.join(repo_root, "patches-bundle.json")
+        with open(mirror_path, "w") as f:
+            json.dump(official, f, indent=2)
+        print(f"📝 Mirrored official patches-bundle.json -> {mirror_path}")
+    except Exception as e:
+        print(f"⚠️ Could not mirror official bundle: {e}")
+
+    print("✅ AllMorphe index update complete.")
 
 
 if __name__ == "__main__":

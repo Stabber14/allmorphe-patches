@@ -1,16 +1,14 @@
 #!/bin/bash
 # AllMorphe Update Script
-# Fetches the latest patches from morphe-patches.software and updates the bundle
-# Can be run locally or by GitHub Actions
+# Regenerates sources.txt, bundles.json and install-all.sh from the
+# morphe-patches.software catalog. Run locally or via GitHub Actions.
 
 set -e
 
-echo "📡 AllMorphe: Starting patch update process..."
+echo "📡 AllMorphe: refreshing bundle index..."
 
-# Run the Python fetch script
-cd /workspace/chats/0249e006b34c1ec1eb4d28a3/allmorphe
+cd "$(dirname "$0")/.."
 python3 fetch_patches.py
 
-echo "✅ AllMorphe update process complete."
-echo "📌 Run 'git add patches-bundle.json && git commit -m \"Update AllMorphe patches\" && git push' to update Morphe"
-echo "📱 Or push to GitHub and the Actions workflow will auto-update"
+echo "✅ AllMorphe index refreshed."
+echo "📌 Review with 'git diff', then commit & push to update the index."

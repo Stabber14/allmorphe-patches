@@ -1,185 +1,39 @@
-name: AllMorphe Patches Auto-Update
+name: AllMorphe Bundle Index Auto-Update
 
 on:
   schedule:
-    # Run daily at 3 AM UTC to check for new patches
     - cron: '0 3 * * *'
   workflow_dispatch:
-    # Allow manual trigger from the Actions tab
 
 jobs:
-  update-patches:
+  update-index:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # needed to commit changes
-      pulls: read      # needed to fetch bundle repos
+      contents: write
 
     steps:
-      - name: 🛠️ Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
 
-      - name: 📡 Set up Python and dependencies
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      - name: 📦 Install Python packages
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+      - name: Install dependencies
+        run: pip install requests
 
-      - name: 🔍 Fetch and aggregate patch metadata from all bundles
-        id: aggregate
-        run: |
-          python << 'PYEOF'
-          import json
-          import os
-          import re
-          import requests
-          import base64
-          from datetime import datetime, timezone
-          
-          # Configuration: GitHub repo URLs for Morphe patch bundles
-          # These are the bundles from morphe-patches.software that will be aggregated
-          BUNDLE_REPOS = [
-              "github.com/MorpheApp/morphe-patches",
-              # Add more bundle repo URLs as discovered from morphe-patches.software:
-              # "github.com/username/patches-repo",
-              # "github.com/another-user/bundle-name",
-          ]
-          
-          print(f"📋 Found {len(BUNDLE_REPOS)} bundle repositories to process")
-          
-          all_metadata = []
-          processed_repos = set()
-          
-          for github_url in BUNDLE_REPOS:
-              if not github_url:
-                  continue
-              
-              match = re.search(r'github\.com/(.+)/(.+)', github_url)
-              if not match:
-                  print(f"⚠️ Invalid GitHub URL: {github_url}")
-                  continue
-              
-              owner, repo_name = match.groups()
-              repo_key = f"{owner}/{repo_name}"
-              
-              if repo_key in processed_repos:
-                  continue
-              processed_repos.add(repo_key)
-              
-              print(f"🔍 Processing: {github_url}")
-              
-              try:
-                  # Fetch patches-bundle.json from the GitHub repo
-                  api_url = f"https://api.github.com/repos/{owner}/{repo_name}/contents/patches-bundle.json"
-                  headers = {"Accept": "application/vnd.github.v3+json"}
-                  
-                  resp = requests.get(api_url, headers=headers, timeout=30)
-                  
-                  if resp.status_code == 200:
-                      # Get the content
-                      content_base64 = resp.json()["content"]
-                      content = base64.b64decode(content_base64).decode("utf-8")
-                      bundle_data = json.loads(content)
-                      
-                      # Extract key metadata fields
-                      metadata = {
-                          "version": bundle_data.get("version", "unknown"),
-                          "public_key": bundle_data.get("public_key", ""),
-                          "created_at": bundle_data.get("created_at", ""),
-                          "description": bundle_data.get("description", ""),
-                          "source_repo": github_url,
-                          "repo_name": repo_name,
-                      }
-                      
-                      # Calculate age since creation
-                      if "created_at" in bundle_data:
-                          try:
-                              created_date = datetime.fromisoformat(bundle_data["created_at"].replace("Z", "+00:00"))
-                              now = datetime.now(timezone.utc)
-                              metadata["age_days"] = max(1, (now - created_date).days)
-                          except:
-                              metadata["age_days"] = 0
-                       
-                      all_metadata.append(metadata)
-                      print(f"  ✅ Retrieved: v{bundle_data.get('version', '?')} "
-                            f"(created {bundle_data.get('created_at', 'unknown')})")
-                      
-                  elif resp.status_code == 404:
-                      print(f"  ⚠️ No patches-bundle.json found in {github_url}")
-                  else:
-                      print(f"  ⚠️ GitHub API returned {resp.status_code} for {github_url}")
-                      
-              except Exception as e:
-                  print(f"  ❌ Failed to process {github_url}: {e}")
-          
-          # Sort by version/creation date (newest first)
-          all_metadata.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-          
-          # Determine the combined version (newest patch version)
-          combined_version = "1.0.0"
-          if all_metadata:
-              combined_version = all_metadata[0].get("version", "1.0.0")
-          
-          # Create the combined patches-bundle.json
-          combined = {
-              "name": "AllMorphe Patches",
-              "version": combined_version,
-              "description": f"Aggregated patch metadata from {len(all_metadata)} bundles "
-                             f"from morphe-patches.software. "
-                             f"Total bundles: {len(processed_repos)}.",
-              "patches_metadata": all_metadata,
-              "lastUpdated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "source": "morphe-patches.software",
-              "totalBundles": len(processed_repos),
-              "totalPatches": len(all_metadata),
-              "format": "morphe-patch-metadata-v1"
-          }
-          
-          # Write to file
-          with open("patches-bundle.json", "w") as f:
-              json.dump(combined, f, indent=2)
-          
-          print(f"\n📝 Generated combined bundle metadata:")
-          print(f"   Version: {combined['version']}")
-          print(f"   Total bundles: {combined['totalBundles']}")
-          print(f"   Total patches metadata entries: {combined['totalPatches']}")
-          print(f"   File updated: patches-bundle.json")
-          
-          # Set output for change detection
-          print(f"::set-output name::changed:true")
-          PYEOF
+      - name: Refresh bundle index
+        run: python allmorphe/fetch_patches.py
 
-      - name: 📝 Commit and push updated patches metadata
-        if: steps.aggregate.outputs.changed == 'true' || always()
+      - name: Commit and push changes
         run: |
-          # Check if this is the first run or if there are actual changes
-          if git diff --quiet patches-bundle.json 2>/dev/null; then
-            echo "ℹ️ No changes detected in patches-bundle.json"
+          if git diff --quiet; then
+            echo "No changes detected."
             exit 0
           fi
-          
           git config user.name "AllMorphe Bot"
           git config user.email "allmorphe-bot@users.noreply.github.com"
-          
-          git add patches-bundle.json
-          git commit -m "chore: update AllMorphe patches metadata [skip ci]"
+          git add sources.txt bundles.json install-all.sh allmorphe/sources.txt allmorphe/bundles.json
+          git commit -m "chore: update AllMorphe bundle index [skip ci]"
           git push
-          echo "✅ Patches metadata updated and pushed to GitHub"
-          echo "📱 Morphe will auto-detect the new version"
-
-      - name: 📊 Report update status
-        if: always()
-        run: |
-          echo "📈 AllMorphe update cycle complete"
-          if git diff --quiet patches-bundle.json 2>/dev/null; then
-            echo "   No new patches this cycle"
-          else
-            echo "   Patches metadata updated successfully"
-            echo "   New version: $(git show HEAD:patches-bundle.json | python3 -c 'import sys,json; print(json.load(sys.stdin).get(\"version\",\"?\"))')"
-          fi
