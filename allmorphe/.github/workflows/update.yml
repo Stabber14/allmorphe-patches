@@ -90,7 +90,6 @@ jobs:
                       # Extract key metadata fields
                       metadata = {
                           "version": bundle_data.get("version", "unknown"),
-                          "download_url": ""
                           "public_key": bundle_data.get("public_key", ""),
                           "created_at": bundle_data.get("created_at", ""),
                           "description": bundle_data.get("description", ""),
