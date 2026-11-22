@@ -10,9 +10,17 @@ Morphe treats one GitHub repository as **one patch source**, backed by a single 
 
 ### Android (Morphe app)
 
+Option A — add every community bundle at once:
+
 1. Open Morphe → **Sources** → **+** (Add source).
 2. Open [`sources.txt`](sources.txt) in this repo and paste its contents into the dialog (Morphe accepts many URLs at once).
-3. Tap **Add**. All bundles are added and stay auto-updated from their own repos.
+3. Tap **Add**. All 589 bundles are added and stay auto-updated from their own repos.
+
+Option B — add this repository as a single source (works, provides the official Morphe patches and never errors):
+
+```
+github.com/Stabber14/allmorphe-patches
+```
 
 Or use the deep links on morphe-patches.software per bundle.
 
