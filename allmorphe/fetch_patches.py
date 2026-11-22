@@ -37,7 +37,7 @@ def fetch_bundle_metadata(github_url):
             
             metadata = {
                 "version": bundle_data.get("version", "unknown"),
-                "download_url": bundle_data.get("download_url", ""),
+                
                 "public_key": bundle_data.get("public_key", ""),
                 "created_at": bundle_data.get("created_at", ""),
                 "source_repo": github_url,
